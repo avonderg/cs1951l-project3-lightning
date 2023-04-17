@@ -26,7 +26,7 @@ type CoinInfo struct {
 
 // Wallet handles keeping track of the owner's coins
 //
-// CoinCollection is the owner of this wallet's set of coins
+// # CoinCollection is the owner of this wallet's set of coins
 //
 // UnseenSpentCoins is a mapping of transaction hashes (which are strings)
 // to a slice of coinInfos. It's used for keeping track of coins that we've
@@ -149,6 +149,72 @@ func (w *Wallet) generateTransactionOutputs(
 		txoChange := &block.TransactionOutput{Amount: change, LockingScript: myScriptB}
 		outputs = append(outputs, txoChange)
 	}
+	return outputs
+}
+
+// generateTransactionOutputs generates the transaction outputs required to create a transaction.
+func (w *Wallet) generateLightningTransactionOutputs(
+	amount uint32,
+	fee uint32,
+	receiverPK []byte,
+	change uint32,
+) []*block.TransactionOutput {
+	//make sure that the public key we're sending our amount to is valid
+	if receiverPK == nil || len(receiverPK) == 0 {
+		utils.Debug.Printf("[generateTransactionOutputs] Error: receiver's public key is invalid")
+		return nil
+	}
+	// the outputs that we will eventually return
+	var outputs []*block.TransactionOutput
+
+	//myScript := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
+	myScript := &pro.MultiParty{MyPublicKey: w.Id.GetPublicKeyBytes(), TheirPublicKey: receiverPK}
+	myScriptB, err := proto.Marshal(myScript)
+	if err != nil {
+		myScriptB = []byte{}
+		fmt.Printf("[wallet.generateLightningTransactionOutputs] Failed to marshal script")
+	}
+	outputs = []*block.TransactionOutput{
+		{Amount: amount, LockingScript: myScriptB},
+		{Amount: 0, LockingScript: []byte{}},
+	}
+	//
+	//txoFunder := &block.TransactionOutput{Amount: amount, LockingScript: myScriptB}
+	//outputs = append(outputs, txoFunder)
+	//
+	//theirScript := &pro.PayToPublicKey{PublicKey: receiverPK}
+	//theirScriptB, err2 := proto.Marshal(theirScript)
+	//if err2 != nil {
+	//	theirScriptB = []byte{}
+	//	fmt.Printf("[wallet.generateLightningTransactionOutputs] Failed to marshal script")
+	//}
+	//// counterparty (amount 0)
+	//txoSending := &block.TransactionOutput{Amount: 0, LockingScript: theirScriptB}
+	//outputs = append(outputs, txoSending)
+
+	// if there's change...
+	if change != 0 {
+		//changeScript := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
+		//changeScriptB, err3 := proto.Marshal(changeScript)
+		//if err3 != nil {
+		//	changeScriptB = []byte{}
+		//	fmt.Printf("[wallet.generateLightningTransactionOutputs] Failed to marshal script")
+		//}
+		//txoChange := &block.TransactionOutput{Amount: change + fee, LockingScript: changeScriptB}
+		//outputs = append(outputs, txoChange)
+		mScript := &pro.MultiParty{MyPublicKey: w.Id.GetPublicKeyBytes(), TheirPublicKey: receiverPK}
+		mScriptB, err1 := proto.Marshal(mScript)
+		if err1 != nil {
+			utils.Debug.Printf("[generateLightningTransactionOutputs] Error: failed to marshal PayToPublicKey script")
+			return nil
+		}
+		changeOutput := &block.TransactionOutput{
+			Amount:        change - fee,
+			LockingScript: mScriptB,
+		}
+		outputs = append(outputs, changeOutput)
+	}
+
 	return outputs
 }
 
@@ -342,14 +408,60 @@ func (w *Wallet) RemoveFromUnconfirmed(txo *block.TransactionOutput) {
 func (w *Wallet) HandleRevokedOutput(hash string, txo *block.TransactionOutput,
 	outIndex uint32, secRevKey []byte, scriptType int) *block.Transaction {
 	// TODO
-	return nil
+	if !RevKeySuccessful(txo.LockingScript, secRevKey, scriptType) {
+		return nil
+	}
+	msg := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
+	script, _ := proto.Marshal(msg)
+
+	input := &block.TransactionInput{hash, outIndex, script}
+	inputs := []*block.TransactionInput{input}
+	output := &block.TransactionOutput{Amount: txo.Amount + w.Config.DefaultFee, LockingScript: script}
+	outputs := []*block.TransactionOutput{output}
+
+	t := &block.Transaction{Segwit: true, Inputs: inputs, Outputs: outputs}
+	utils.Sign(w.Id.GetPrivateKey(), []byte(hash))
+	return t
 }
 
 // GenerateFundingTransaction is very similar to RequestTransaction, except it does NOT broadcast to the node.
 // Also, the outputs are slightly different.
 func (w *Wallet) GenerateFundingTransaction(amount uint32, fee uint32, counterparty []byte) *block.Transaction {
 	// TODO
-	return nil
+	// have to ensure that we have enough money to actually make this transaction
+	if w.Balance < amount+fee {
+		utils.Debug.Printf("%v did not have a large enough balance to make the requested transaction\n"+
+			"Balance: %v\nTransaction cost: %v", utils.FmtAddr(w.Address), w.Balance, amount+fee)
+		return nil
+	}
+	change, inputs, coinInfos := w.generateTransactionInputs(amount+fee, fee)
+	if coinInfos == nil {
+		utils.Debug.Printf("[wallet.RequestTransaction] coinInfos were nil")
+		return nil
+	}
+
+	outputs := w.generateLightningTransactionOutputs(amount, fee, counterparty, change)
+	tx := &block.Transaction{
+		Version:  0,
+		Inputs:   inputs,
+		Outputs:  outputs,
+		LockTime: 0,
+	}
+	// now that we have the transaction, we can add the coinInfos to our UnseenSpentCoins
+	// and temporarily remove from the CoinCollection
+	w.UnseenSpentCoins[tx.Hash()] = coinInfos
+	for _, ci := range coinInfos {
+		delete(w.CoinCollection, ci)
+	}
+	// if we want to broadcast, send to the channel that the node monitors
+	go func() {
+		w.TransactionRequests <- tx
+	}()
+	// we do this here in case generateTransactionInputs doesn't work
+	// have to make sure that the balance is decremented so that the wallet owner can't keep spamming their coin
+	coinTotals := amount + fee + change
+	w.Balance -= coinTotals
+	return tx
 }
 
 // RevKeySuccessful checks whether a secret revocation key is valid for a txo's lockingScript.

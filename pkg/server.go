@@ -164,6 +164,19 @@ func (n *Node) ForwardTransaction(ctx context.Context, in *pro.TransactionWithAd
 	defer n.mutex.Unlock()
 
 	//TODO: handle using myTX
+	address := &address.Address{Addr: addr}
+
+	if val, ok := n.SeenTransactions[myTx.Hash()]; ok { // if it WAS seen
+		val.Count += 1
+		n.SeenTransactions[myTx.Hash()] = val
+	} else { // if it was NOT seen
+		if myTx.Segwit == true { // if it follows the Segwit protocol
+			w, _ := address.GetWitnessesRPC(block.EncodeTransaction(myTx))
+			myTx.Witnesses = w.GetWitnesses()
+		}
+		count := &TransactionWithCount{Transaction: myTx, Count: 1}
+		n.SeenTransactions[myTx.Hash()] = count
+	}
 
 	//------------------------ Do NOT edit below this line ----------------------------------//
 
@@ -235,5 +248,7 @@ func (n *Node) ForwardBlock(ctx context.Context, in *pro.Block) (*pro.Empty, err
 // GetWitnesses is called by another SegWit node to get the witnesses (signatures) from you.
 func (n *Node) GetWitnesses(ctx context.Context, in *pro.Transaction) (*pro.Witnesses, error) {
 	//TODO
-	return nil, nil
+	w := in.Witnesses
+	return &pro.Witnesses{Witnesses: w}, nil
+
 }

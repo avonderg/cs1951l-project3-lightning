@@ -133,6 +133,7 @@ func (n *Node) BroadcastTransaction(tx *block.Transaction) {
 				Transaction: d,
 				Address:     n.Address,
 			}
+			txWithAddr.Transaction.Witnesses = nil // remove witnesses
 			_, err := addr.ForwardTransactionRPC(txWithAddr)
 			if err != nil {
 				utils.Debug.Printf("%v received no response from ForwardTransactionRPC to %v",
