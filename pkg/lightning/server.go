@@ -113,25 +113,26 @@ func (ln *LightningNode) GetRevocationKey(ctx context.Context, in *pro.SignedTra
 		return nil, nil
 	}
 	channel := ln.Channels[peer]
-	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(in.SignedTransaction))
+	tx := block.DecodeTransaction(in.SignedTransaction)
+	channel.MyTransactions = append(channel.MyTransactions, tx)
 
 	scriptType, err := script.DetermineScriptType(in.RevocationKey)
 	if err != nil {
 		return nil, err
 	}
 
-	var c *pro.TransactionOutput
+	var c *block.TransactionOutput
 	var index uint32
 
 	if channel.Funder == true {
-		c = in.SignedTransaction.Outputs[1]
+		c = tx.Outputs[1]
 		index = 1
 	} else {
-		c = in.SignedTransaction.Outputs[0]
+		c = tx.Outputs[0]
 		index = 0
 	}
-	hash := block.DecodeTransaction(in.SignedTransaction).Hash()
-	revInfo := &RevocationInfo{RevKey: channel.MyRevocationKeys[hash], TransactionOutput: block.DecodeTransactionOutput(c), OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
+	hash := tx.Hash()
+	revInfo := &RevocationInfo{RevKey: channel.MyRevocationKeys[hash], TransactionOutput: c, OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
 
 	channel.TheirRevocationKeys[hash] = revInfo
 
