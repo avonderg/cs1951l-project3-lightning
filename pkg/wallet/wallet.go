@@ -167,7 +167,6 @@ func (w *Wallet) generateLightningTransactionOutputs(
 	// the outputs that we will eventually return
 	var outputs []*block.TransactionOutput
 
-	//myScript := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
 	myScript := &pro.MultiParty{MyPublicKey: w.Id.GetPublicKeyBytes(), TheirPublicKey: receiverPK}
 	myScriptB, err := proto.Marshal(myScript)
 	if err != nil {
@@ -176,45 +175,17 @@ func (w *Wallet) generateLightningTransactionOutputs(
 	}
 	outputs = []*block.TransactionOutput{
 		{Amount: amount, LockingScript: myScriptB},
-		{Amount: 0, LockingScript: []byte{}},
+		{Amount: 0, LockingScript: myScriptB},
 	}
-	//
-	//txoFunder := &block.TransactionOutput{Amount: amount, LockingScript: myScriptB}
-	//outputs = append(outputs, txoFunder)
-	//
-	//theirScript := &pro.PayToPublicKey{PublicKey: receiverPK}
-	//theirScriptB, err2 := proto.Marshal(theirScript)
-	//if err2 != nil {
-	//	theirScriptB = []byte{}
-	//	fmt.Printf("[wallet.generateLightningTransactionOutputs] Failed to marshal script")
-	//}
-	//// counterparty (amount 0)
-	//txoSending := &block.TransactionOutput{Amount: 0, LockingScript: theirScriptB}
-	//outputs = append(outputs, txoSending)
 
 	// if there's change...
 	if change != 0 {
-		//changeScript := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
-		//changeScriptB, err3 := proto.Marshal(changeScript)
-		//if err3 != nil {
-		//	changeScriptB = []byte{}
-		//	fmt.Printf("[wallet.generateLightningTransactionOutputs] Failed to marshal script")
-		//}
-		//txoChange := &block.TransactionOutput{Amount: change + fee, LockingScript: changeScriptB}
-		//outputs = append(outputs, txoChange)
-		mScript := &pro.MultiParty{MyPublicKey: w.Id.GetPublicKeyBytes(), TheirPublicKey: receiverPK}
-		mScriptB, err1 := proto.Marshal(mScript)
-		if err1 != nil {
-			utils.Debug.Printf("[generateLightningTransactionOutputs] Error: failed to marshal PayToPublicKey script")
-			return nil
-		}
 		changeOutput := &block.TransactionOutput{
-			Amount:        change - fee,
-			LockingScript: mScriptB,
+			Amount:        change + fee,
+			LockingScript: myScriptB,
 		}
 		outputs = append(outputs, changeOutput)
 	}
-
 	return outputs
 }
 
@@ -442,10 +413,12 @@ func (w *Wallet) GenerateFundingTransaction(amount uint32, fee uint32, counterpa
 
 	outputs := w.generateLightningTransactionOutputs(amount, fee, counterparty, change)
 	tx := &block.Transaction{
-		Version:  0,
-		Inputs:   inputs,
-		Outputs:  outputs,
-		LockTime: 0,
+		Segwit:    true,
+		Version:   0,
+		Inputs:    inputs,
+		Outputs:   outputs,
+		Witnesses: make([][]byte, 0),
+		LockTime:  0,
 	}
 	// now that we have the transaction, we can add the coinInfos to our UnseenSpentCoins
 	// and temporarily remove from the CoinCollection
@@ -454,9 +427,9 @@ func (w *Wallet) GenerateFundingTransaction(amount uint32, fee uint32, counterpa
 		delete(w.CoinCollection, ci)
 	}
 	// if we want to broadcast, send to the channel that the node monitors
-	go func() {
-		w.TransactionRequests <- tx
-	}()
+	//go func() {
+	//	w.TransactionRequests <- tx
+	//}()
 	// we do this here in case generateTransactionInputs doesn't work
 	// have to make sure that the balance is decremented so that the wallet owner can't keep spamming their coin
 	coinTotals := amount + fee + change
