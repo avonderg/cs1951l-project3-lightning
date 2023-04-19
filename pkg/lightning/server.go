@@ -7,6 +7,7 @@ import (
 	"Coin/pkg/pro"
 	"Coin/pkg/script"
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -49,27 +50,29 @@ func (ln *LightningNode) OpenChannel(ctx context.Context, in *pro.OpenChannelReq
 	//TODO
 	peer := ln.PeerDb.Get(in.Address)
 	if peer == nil { // is not in the PeerDB
-		return nil, nil
+		return nil, fmt.Errorf("peer %s not found in PeerDB", in.Address)
 	}
 	if _, ok := ln.Channels[peer]; ok { // if there's already a channel opened
-		return nil, nil
+		return nil, fmt.Errorf("channel with peer %s already exists", in.Address)
 	}
 	funding := block.DecodeTransaction(in.FundingTransaction)
 	refund := block.DecodeTransaction(in.RefundTransaction)
-	ln.ValidateAndSign(funding)
-	ln.ValidateAndSign(refund)
-
-	// Generate a dummy revocation key pair and add it to MyRevocationKeys
+	err1 := ln.ValidateAndSign(funding)
+	if err1 != nil {
+		return nil, err1
+	}
+	err2 := ln.ValidateAndSign(refund)
+	if err2 != nil {
+		return nil, err2
+	}
+	channel := &Channel{Funder: false, FundingTransaction: funding, State: 0, CounterPartyPubKey: in.PublicKey, TheirTransactions: []*block.Transaction{funding}, MyTransactions: []*block.Transaction{funding}, MyRevocationKeys: make(map[string][]byte), TheirRevocationKeys: make(map[string]*RevocationInfo)}
 	pub, priv := GenerateRevocationKey()
-	m := make(map[string][]byte)
-	m[string(pub)] = priv
-	channel := &Channel{FundingTransaction: funding, TheirTransactions: []*block.Transaction{funding}, MyTransactions: []*block.Transaction{funding}, MyRevocationKeys: m}
-
+	channel.MyRevocationKeys[string(pub)] = priv
 	ln.Channels[peer] = channel
 
 	// Construct and sign our response
 	resp := &pro.OpenChannelResponse{
-		PublicKey:                pub,
+		PublicKey:                in.GetPublicKey(),
 		SignedFundingTransaction: block.EncodeTransaction(funding),
 		SignedRefundTransaction:  block.EncodeTransaction(refund)}
 	return resp, nil
@@ -83,7 +86,11 @@ func (ln *LightningNode) GetUpdatedTransactions(ctx context.Context, in *pro.Tra
 	}
 	tx := block.DecodeTransaction(in.Transaction)
 	//ln.ValidateAndSign(tx)
-	signature, _ := tx.Sign(ln.Id)
+	signature, err := tx.Sign(ln.Id)
+	if err != nil {
+		return nil, err
+	}
+
 	tx.Witnesses = append(tx.Witnesses, signature)
 
 	public, private := GenerateRevocationKey()

@@ -382,16 +382,21 @@ func (w *Wallet) HandleRevokedOutput(hash string, txo *block.TransactionOutput,
 	if !RevKeySuccessful(txo.LockingScript, secRevKey, scriptType) {
 		return nil
 	}
+
 	msg := &pro.PayToPublicKey{PublicKey: w.Id.GetPublicKeyBytes()}
 	script, _ := proto.Marshal(msg)
 
 	input := &block.TransactionInput{hash, outIndex, script}
 	inputs := []*block.TransactionInput{input}
-	output := &block.TransactionOutput{Amount: txo.Amount + w.Config.DefaultFee, LockingScript: script}
+	output := &block.TransactionOutput{Amount: txo.Amount - w.Config.DefaultFee, LockingScript: script}
 	outputs := []*block.TransactionOutput{output}
 
-	t := &block.Transaction{Segwit: true, Inputs: inputs, Outputs: outputs}
-	utils.Sign(w.Id.GetPrivateKey(), []byte(hash))
+	t := &block.Transaction{Segwit: true, Inputs: inputs, Outputs: outputs, Witnesses: [][]byte{}}
+	wit := make([][]byte, 0)
+	signature, _ := utils.Sign(w.Id.GetPrivateKey(), []byte(hash))
+	input.UnlockingScript = append(signature, w.Id.GetPublicKeyBytes()...)
+	wit = append(wit, signature)
+	t.Witnesses = wit
 	return t
 }
 
