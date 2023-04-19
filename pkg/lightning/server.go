@@ -55,8 +55,8 @@ func (ln *LightningNode) OpenChannel(ctx context.Context, in *pro.OpenChannelReq
 	if _, ok := ln.Channels[peer]; ok { // if there's already a channel opened
 		return nil, fmt.Errorf("channel with peer %s already exists", in.Address)
 	}
-	funding := block.DecodeTransaction(in.FundingTransaction)
-	refund := block.DecodeTransaction(in.RefundTransaction)
+	funding := block.DecodeTransaction(in.GetFundingTransaction())
+	refund := block.DecodeTransaction(in.GetRefundTransaction())
 	err1 := ln.ValidateAndSign(funding)
 	if err1 != nil {
 		return nil, err1
@@ -115,22 +115,28 @@ func (ln *LightningNode) GetRevocationKey(ctx context.Context, in *pro.SignedTra
 	channel := ln.Channels[peer]
 	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(in.SignedTransaction))
 
-	scriptType, _ := script.DetermineScriptType(in.RevocationKey)
+	scriptType, err := script.DetermineScriptType(in.RevocationKey)
+	if err != nil {
+		return nil, err
+	}
 
 	var c *pro.TransactionOutput
 	var index uint32
 
 	if channel.Funder == true {
-		c = in.SignedTransaction.Outputs[0]
-		index = 0
-	} else {
 		c = in.SignedTransaction.Outputs[1]
 		index = 1
+	} else {
+		c = in.SignedTransaction.Outputs[0]
+		index = 0
 	}
-	hash := string(c.LockingScript)
-	revInfo := &RevocationInfo{RevKey: in.RevocationKey, TransactionOutput: block.DecodeTransactionOutput(c), OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
+	hash := block.DecodeTransaction(in.SignedTransaction).Hash()
+	revInfo := &RevocationInfo{RevKey: channel.MyRevocationKeys[hash], TransactionOutput: block.DecodeTransactionOutput(c), OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
 
 	channel.TheirRevocationKeys[hash] = revInfo
 
-	return nil, nil
+	key := channel.MyRevocationKeys[revInfo.TransactionHash]
+	rKey := &pro.RevocationKey{Key: key}
+
+	return rKey, nil
 }
