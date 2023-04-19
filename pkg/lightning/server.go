@@ -120,17 +120,14 @@ func (ln *LightningNode) GetRevocationKey(ctx context.Context, in *pro.SignedTra
 	if err != nil {
 		return nil, err
 	}
+	index := 0
 
-	var c *block.TransactionOutput
-	var index uint32
-
-	if channel.Funder == true {
-		c = tx.Outputs[1]
+	if channel.Funder {
 		index = 1
-	} else {
-		c = tx.Outputs[0]
-		index = 0
 	}
+
+	c := tx.Outputs[index]
+
 	hash := tx.Hash()
 	revInfo := &RevocationInfo{RevKey: channel.MyRevocationKeys[hash], TransactionOutput: c, OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
 
