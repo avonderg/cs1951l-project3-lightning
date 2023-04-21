@@ -72,7 +72,7 @@ func (ln *LightningNode) OpenChannel(ctx context.Context, in *pro.OpenChannelReq
 
 	// Construct and sign our response
 	resp := &pro.OpenChannelResponse{
-		PublicKey:                in.GetPublicKey(),
+		PublicKey:                ln.Id.GetPublicKeyBytes(),
 		SignedFundingTransaction: block.EncodeTransaction(funding),
 		SignedRefundTransaction:  block.EncodeTransaction(refund)}
 	return resp, nil

@@ -55,7 +55,7 @@ func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amou
 	pub, priv := GenerateRevocationKey()
 	channel.MyRevocationKeys[fund_tx.Hash()] = priv
 	refund_tx := ln.generateRefundTransaction(theirPubKey, fund_tx, fee, pub)
-	channelRq := &pro.OpenChannelRequest{Address: peer.Addr.Addr, PublicKey: ln.Id.GetPublicKeyBytes(), FundingTransaction: block.EncodeTransaction(fund_tx), RefundTransaction: block.EncodeTransaction(refund_tx)}
+	channelRq := &pro.OpenChannelRequest{Address: ln.Address, PublicKey: ln.Id.GetPublicKeyBytes(), FundingTransaction: block.EncodeTransaction(fund_tx), RefundTransaction: block.EncodeTransaction(refund_tx)}
 	response, _ := peer.Addr.OpenChannelRPC(channelRq)
 	channel.FundingTransaction = block.DecodeTransaction(response.SignedFundingTransaction)
 	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(response.SignedRefundTransaction))
