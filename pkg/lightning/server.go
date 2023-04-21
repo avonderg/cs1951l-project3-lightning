@@ -65,9 +65,9 @@ func (ln *LightningNode) OpenChannel(ctx context.Context, in *pro.OpenChannelReq
 	if err2 != nil {
 		return nil, err2
 	}
-	channel := &Channel{Funder: false, FundingTransaction: funding, State: 0, CounterPartyPubKey: in.PublicKey, TheirTransactions: []*block.Transaction{funding}, MyTransactions: []*block.Transaction{funding}, MyRevocationKeys: make(map[string][]byte), TheirRevocationKeys: make(map[string]*RevocationInfo)}
-	pub, priv := GenerateRevocationKey()
-	channel.MyRevocationKeys[string(pub)] = priv
+	channel := &Channel{Funder: false, FundingTransaction: funding, State: 0, CounterPartyPubKey: in.PublicKey, TheirTransactions: []*block.Transaction{refund}, MyTransactions: []*block.Transaction{refund}, MyRevocationKeys: make(map[string][]byte), TheirRevocationKeys: make(map[string]*RevocationInfo)}
+	_, priv := GenerateRevocationKey()
+	channel.MyRevocationKeys[refund.Hash()] = priv
 	ln.Channels[peer] = channel
 
 	// Construct and sign our response
@@ -113,16 +113,20 @@ func (ln *LightningNode) GetRevocationKey(ctx context.Context, in *pro.SignedTra
 		return nil, nil
 	}
 	channel := ln.Channels[peer]
-	tx := block.DecodeTransaction(in.SignedTransaction)
-	channel.MyTransactions = append(channel.MyTransactions, tx)
-
 	index := 0
-
 	if channel.Funder {
 		index = 1
 	}
-
+	tx := block.DecodeTransaction(in.SignedTransaction)
 	c := tx.Outputs[index]
+	channel.MyTransactions = append(channel.MyTransactions, tx)
+
+	//index := 0
+	//if channel.Funder {
+	//	index = 1
+	//}
+	//
+	//c := tx.Outputs[index]
 	scriptType, err := script.DetermineScriptType(c.LockingScript)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,8 @@ import (
 	"Coin/pkg/block"
 	"Coin/pkg/id"
 	"Coin/pkg/peer"
+	"Coin/pkg/pro"
+	"Coin/pkg/utils"
 )
 
 // Channel is our node's view of a channel
@@ -46,6 +48,19 @@ func GenerateRevocationKey() ([]byte, []byte) {
 // fee must be enough to cover two transactions! You will get back change from first
 func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amount uint32, fee uint32) {
 	// TODO
+	channel := &Channel{Funder: true, CounterPartyPubKey: theirPubKey, State: 0, MyTransactions: []*block.Transaction{}, TheirTransactions: []*block.Transaction{}, MyRevocationKeys: map[string][]byte{}, TheirRevocationKeys: map[string]*RevocationInfo{}}
+	req := WalletRequest{Amount: amount, Fee: 2 * fee, CounterPartyPubKey: theirPubKey}
+	fund_tx := ln.generateFundingTransaction(req)
+	pub, priv := GenerateRevocationKey()
+	channel.MyRevocationKeys[fund_tx.Hash()] = priv
+	refund_tx := ln.generateRefundTransaction(theirPubKey, fund_tx, fee, pub)
+	channelRq := &pro.OpenChannelRequest{Address: peer.Addr.Addr, PublicKey: ln.Id.GetPublicKeyBytes(), FundingTransaction: block.EncodeTransaction(fund_tx), RefundTransaction: block.EncodeTransaction(refund_tx)}
+	response, _ := peer.Addr.OpenChannelRPC(channelRq)
+	channel.FundingTransaction = block.DecodeTransaction(response.SignedFundingTransaction)
+	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(response.SignedRefundTransaction))
+	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(response.SignedRefundTransaction))
+	signed, _ := utils.Sign(ln.Id.GetPrivateKey(), []byte(fund_tx.Hash()))
+	fund_tx.Witnesses = append(fund_tx.Witnesses, signed)
 }
 
 // UpdateState is called to update the state of a channel.
