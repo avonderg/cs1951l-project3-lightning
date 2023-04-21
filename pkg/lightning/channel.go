@@ -49,6 +49,7 @@ func GenerateRevocationKey() ([]byte, []byte) {
 func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amount uint32, fee uint32) {
 	// TODO
 	channel := &Channel{Funder: true, CounterPartyPubKey: theirPubKey, State: 0, MyTransactions: []*block.Transaction{}, TheirTransactions: []*block.Transaction{}, MyRevocationKeys: map[string][]byte{}, TheirRevocationKeys: map[string]*RevocationInfo{}}
+	ln.Channels[peer] = channel
 	req := WalletRequest{Amount: amount, Fee: 2 * fee, CounterPartyPubKey: theirPubKey}
 	fund_tx := ln.generateFundingTransaction(req)
 	pub, priv := GenerateRevocationKey()
