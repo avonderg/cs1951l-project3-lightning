@@ -5,6 +5,7 @@ import (
 	"Coin/pkg/id"
 	"Coin/pkg/peer"
 	"Coin/pkg/pro"
+	"Coin/pkg/script"
 	"Coin/pkg/utils"
 )
 
@@ -67,4 +68,27 @@ func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amou
 // UpdateState is called to update the state of a channel.
 func (ln *LightningNode) UpdateState(peer *peer.Peer, tx *block.Transaction) {
 	// TODO
+	tx_a := &pro.TransactionWithAddress{Transaction: block.EncodeTransaction(tx), Address: peer.Addr.Addr}
+	updated_tx, _ := peer.Addr.GetUpdatedTransactionsRPC(tx_a)
+	channel := ln.Channels[peer]
+	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(updated_tx.SignedTransaction))
+	ln.SignTransaction(block.DecodeTransaction(updated_tx.UnsignedTransaction))
+	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(updated_tx.UnsignedTransaction))
+	revKey := channel.MyRevocationKeys[tx.Hash()]
+	signed := &pro.SignedTransactionWithKey{SignedTransaction: updated_tx.SignedTransaction, Address: peer.Addr.Addr, RevocationKey: revKey}
+	key, _ := peer.Addr.GetRevocationKeyRPC(signed)
+	ln.UpdateState(peer, tx)
+	index := 0
+	if channel.Funder {
+		index = 1
+	}
+	c := updated_tx.SignedTransaction.Outputs[index]
+	scriptType, _ := script.DetermineScriptType(c.LockingScript)
+	hash := tx.Hash()
+	revInfo := &RevocationInfo{RevKey: key.Key, TransactionOutput: block.DecodeTransactionOutput(c), OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
+
+	channel.TheirRevocationKeys[hash] = revInfo
+
+	//key := channel.MyRevocationKeys[revInfo.TransactionHash]
+	//rKey := &pro.RevocationKey{Key: key}
 }
