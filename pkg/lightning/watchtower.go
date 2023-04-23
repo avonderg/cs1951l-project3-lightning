@@ -13,8 +13,16 @@ type WatchTower struct {
 	RevokedTransactions chan *RevocationInfo
 }
 
-//HandleBlock handles a block and figures out if we need to revoke a transaction
+// HandleBlock handles a block and figures out if we need to revoke a transaction
 func (w *WatchTower) HandleBlock(block *block.Block) *RevocationInfo {
 	// TODO
+	for _, tx := range block.Transactions {
+		hash := tx.Hash()
+		if info, ok := w.RevocationKeys[hash]; ok { // if we are monitoring this tx
+			w.RevokedTransactions <- info
+			return info
+		}
+	}
+
 	return nil
 }
