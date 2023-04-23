@@ -7,7 +7,6 @@ import (
 	"Coin/pkg/pro"
 	"Coin/pkg/script"
 	"Coin/pkg/utils"
-	"fmt"
 )
 
 // Channel is our node's view of a channel
@@ -69,28 +68,27 @@ func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amou
 // UpdateState is called to update the state of a channel.
 func (ln *LightningNode) UpdateState(peer *peer.Peer, tx *block.Transaction) {
 	// TODO
-	tx_a := &pro.TransactionWithAddress{Transaction: block.EncodeTransaction(tx), Address: peer.Addr.Addr}
-	fmt.Sprint("got here")
+	tx_a := &pro.TransactionWithAddress{Transaction: block.EncodeTransaction(tx), Address: ln.Address}
 	updated_tx, _ := peer.Addr.GetUpdatedTransactionsRPC(tx_a)
 	channel := ln.Channels[peer]
 	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(updated_tx.SignedTransaction))
-	ln.SignTransaction(block.DecodeTransaction(updated_tx.UnsignedTransaction))
-	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(updated_tx.UnsignedTransaction))
+	decoded_tx := block.DecodeTransaction(updated_tx.UnsignedTransaction)
+	ln.SignTransaction(decoded_tx)
+	channel.TheirTransactions = append(channel.TheirTransactions, decoded_tx)
 	revKey := channel.MyRevocationKeys[tx.Hash()]
-	signed := &pro.SignedTransactionWithKey{SignedTransaction: updated_tx.SignedTransaction, Address: peer.Addr.Addr, RevocationKey: revKey}
+	signed := &pro.SignedTransactionWithKey{SignedTransaction: block.EncodeTransaction(decoded_tx), Address: ln.Address, RevocationKey: revKey}
 	key, _ := peer.Addr.GetRevocationKeyRPC(signed)
-	ln.UpdateState(peer, tx)
+	channel.State += 1 // increment the state
 	index := 0
 	if channel.Funder {
 		index = 1
 	}
 	c := updated_tx.SignedTransaction.Outputs[index]
 	scriptType, _ := script.DetermineScriptType(c.LockingScript)
-	hash := tx.Hash()
-	revInfo := &RevocationInfo{RevKey: key.Key, TransactionOutput: block.DecodeTransactionOutput(c), OutputIndex: uint32(index), TransactionHash: hash, ScriptType: scriptType}
+	theirTransaction := channel.TheirTransactions[channel.State]
 
-	channel.TheirRevocationKeys[hash] = revInfo
+	revInfo := &RevocationInfo{RevKey: key.Key, TransactionOutput: theirTransaction.Outputs[index], OutputIndex: uint32(index), TransactionHash: theirTransaction.Hash(), ScriptType: scriptType}
 
-	//key := channel.MyRevocationKeys[revInfo.TransactionHash]
-	//rKey := &pro.RevocationKey{Key: key}
+	channel.TheirRevocationKeys[theirTransaction.Hash()] = revInfo
+
 }
