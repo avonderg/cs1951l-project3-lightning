@@ -7,6 +7,7 @@ import (
 	"Coin/pkg/pro"
 	"Coin/pkg/script"
 	"Coin/pkg/utils"
+	"fmt"
 )
 
 // Channel is our node's view of a channel
@@ -69,6 +70,7 @@ func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amou
 func (ln *LightningNode) UpdateState(peer *peer.Peer, tx *block.Transaction) {
 	// TODO
 	tx_a := &pro.TransactionWithAddress{Transaction: block.EncodeTransaction(tx), Address: peer.Addr.Addr}
+	fmt.Sprint("got here")
 	updated_tx, _ := peer.Addr.GetUpdatedTransactionsRPC(tx_a)
 	channel := ln.Channels[peer]
 	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(updated_tx.SignedTransaction))
