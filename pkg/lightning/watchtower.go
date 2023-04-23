@@ -19,7 +19,9 @@ func (w *WatchTower) HandleBlock(block *block.Block) *RevocationInfo {
 	for _, tx := range block.Transactions {
 		hash := tx.Hash()
 		if info, ok := w.RevocationKeys[hash]; ok { // if we are monitoring this tx
-			w.RevokedTransactions <- info
+			go func(i *RevocationInfo) {
+				w.RevokedTransactions <- i
+			}(info)
 			return info
 		}
 	}
