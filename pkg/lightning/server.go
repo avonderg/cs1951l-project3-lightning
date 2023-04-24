@@ -86,12 +86,12 @@ func (ln *LightningNode) GetUpdatedTransactions(ctx context.Context, in *pro.Tra
 	}
 	tx := block.DecodeTransaction(in.Transaction)
 	//ln.ValidateAndSign(tx)
-	err := ln.ValidateAndSign(tx)
+	signature, err := tx.Sign(ln.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	//tx.Witnesses = append(tx.Witnesses, signature)
+	tx.Witnesses = append(tx.Witnesses, signature)
 
 	public, private := GenerateRevocationKey()
 

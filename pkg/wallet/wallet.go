@@ -179,7 +179,7 @@ func (w *Wallet) generateLightningTransactionOutputs(
 	}
 
 	// if there's change...
-	if change != 0 {
+	if change > 0 {
 		changeOutput := &block.TransactionOutput{
 			Amount:        change + fee,
 			LockingScript: myScriptB,
@@ -422,23 +422,22 @@ func (w *Wallet) GenerateFundingTransaction(amount uint32, fee uint32, counterpa
 		Version:   0,
 		Inputs:    inputs,
 		Outputs:   outputs,
-		Witnesses: make([][]byte, 0),
-		LockTime:  0,
-	}
+		Witnesses: make([][]byte, 0)}
 	// now that we have the transaction, we can add the coinInfos to our UnseenSpentCoins
 	// and temporarily remove from the CoinCollection
-	w.UnseenSpentCoins[tx.Hash()] = coinInfos
-	for _, ci := range coinInfos {
-		delete(w.CoinCollection, ci)
-	}
-	// if we want to broadcast, send to the channel that the node monitors
-	//go func() {
-	//	w.TransactionRequests <- tx
-	//}()
-	// we do this here in case generateTransactionInputs doesn't work
-	// have to make sure that the balance is decremented so that the wallet owner can't keep spamming their coin
-	coinTotals := amount + fee + change
-	w.Balance -= coinTotals
+	// UNCOMMENT BELOW HERE!!!
+	//w.UnseenSpentCoins[tx.Hash()] = coinInfos
+	//for _, ci := range coinInfos {
+	//	delete(w.CoinCollection, ci)
+	//}
+	//// if we want to broadcast, send to the channel that the node monitors
+	////go func() {
+	////	w.TransactionRequests <- tx
+	////}()
+	//// we do this here in case generateTransactionInputs doesn't work
+	//// have to make sure that the balance is decremented so that the wallet owner can't keep spamming their coin
+	//coinTotals := amount + fee + change
+	//w.Balance -= coinTotals
 	return tx
 }
 

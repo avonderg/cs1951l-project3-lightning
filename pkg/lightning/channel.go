@@ -54,15 +54,17 @@ func (ln *LightningNode) CreateChannel(peer *peer.Peer, theirPubKey []byte, amou
 	req := WalletRequest{Amount: amount, Fee: 2 * fee, CounterPartyPubKey: theirPubKey}
 	fund_tx := ln.generateFundingTransaction(req)
 	pub, priv := GenerateRevocationKey()
-	channel.MyRevocationKeys[fund_tx.Hash()] = priv
+	//channel.MyRevocationKeys[fund_tx.Hash()] = priv
 	refund_tx := ln.generateRefundTransaction(theirPubKey, fund_tx, fee, pub)
+	channel.MyRevocationKeys[refund_tx.Hash()] = priv
 	channelRq := &pro.OpenChannelRequest{Address: ln.Address, PublicKey: ln.Id.GetPublicKeyBytes(), FundingTransaction: block.EncodeTransaction(fund_tx), RefundTransaction: block.EncodeTransaction(refund_tx)}
 	response, _ := peer.Addr.OpenChannelRPC(channelRq)
-	channel.FundingTransaction = block.DecodeTransaction(response.SignedFundingTransaction)
-	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(response.SignedRefundTransaction))
-	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(response.SignedRefundTransaction))
+	channel.FundingTransaction = block.DecodeTransaction(response.GetSignedFundingTransaction())
+	channel.TheirTransactions = append(channel.TheirTransactions, block.DecodeTransaction(response.GetSignedRefundTransaction()))
+	channel.MyTransactions = append(channel.MyTransactions, block.DecodeTransaction(response.GetSignedRefundTransaction()))
 	signed, _ := utils.Sign(ln.Id.GetPrivateKey(), []byte(fund_tx.Hash()))
 	fund_tx.Witnesses = append(fund_tx.Witnesses, signed)
+	ln.BroadcastTransaction <- fund_tx
 }
 
 // UpdateState is called to update the state of a channel.
