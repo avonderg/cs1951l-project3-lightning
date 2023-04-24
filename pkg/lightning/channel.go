@@ -83,12 +83,13 @@ func (ln *LightningNode) UpdateState(peer *peer.Peer, tx *block.Transaction) {
 	if channel.Funder {
 		index = 1
 	}
-	c := updated_tx.SignedTransaction.Outputs[index]
-	scriptType, _ := script.DetermineScriptType(c.LockingScript)
+
+	//c := updated_tx.SignedTransaction.Outputs[index]
 	theirTransaction := channel.TheirTransactions[channel.State]
+	scriptType, _ := script.DetermineScriptType(theirTransaction.Outputs[index].LockingScript)
 
-	revInfo := &RevocationInfo{RevKey: key.Key, TransactionOutput: theirTransaction.Outputs[index], OutputIndex: uint32(index), TransactionHash: theirTransaction.Hash(), ScriptType: scriptType}
+	revInfo := &RevocationInfo{RevKey: key.GetKey(), TransactionOutput: theirTransaction.Outputs[index], OutputIndex: uint32(index), TransactionHash: theirTransaction.Hash(), ScriptType: scriptType}
 
-	channel.TheirRevocationKeys[theirTransaction.Hash()] = revInfo
+	channel.TheirRevocationKeys[channel.TheirTransactions[channel.State].Hash()] = revInfo
 
 }
